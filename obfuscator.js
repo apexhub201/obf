@@ -1,24 +1,15 @@
 /**
- * APEX HUB OBFUSCATOR ENGINE
- * Advanced Lua/Luau transformer - client-side only
+ * APEX HUB OBFUSCATOR - FIXED VERSION
+ * Simple but working Lua/Luau obfuscator
  */
-
 class LuaObfuscator {
     constructor(options = {}) {
         this.options = {
-            renameVariables: true,
-            renameFunctions: true,
-            stringProtection: true,
-            constantTransform: true,
-            controlFlow: true,
-            deadCode: true,
-            minify: true,
-            preserveGlobals: true,
-            preserveAPI: true,
-            targetRuntime: 'roblox',
-            seed: 42,
+            seed: Math.floor(Math.random() * 999999),
             ...options
         };
+        this.varMap = new Map();
+        this.funcMap = new Map();
         this.globalApiNames = new Set([
             'game', 'workspace', 'script', 'shared', 'require', 'Instance', 'Vector3', 'CFrame', 'Enum',
             'Color3', 'BrickColor', 'TweenService', 'Players', 'LocalPlayer', 'print', 'warn', 'error',
@@ -29,14 +20,11 @@ class LuaObfuscator {
             'unpack', 'pack', 'insert', 'remove', 'concat', 'sort', 'find', 'sub', 'gsub', 'format', 'rep',
             'match', 'gmatch', 'lower', 'upper', 'len', 'reverse', 'char', 'byte', 'floor', 'ceil', 'abs',
             'random', 'randomseed', 'min', 'max', 'sqrt', 'exp', 'log', 'sin', 'cos', 'tan', 'pi', 'huge',
-            'Vector2', 'Vector3int16', 'Vector2int16', 'CFrame', 'UDim', 'UDim2', 'Rect', 'Region3',
+            'Vector2', 'Vector3int16', 'Vector2int16', 'UDim', 'UDim2', 'Rect', 'Region3',
             'RaycastParams', 'PathfindingService', 'ReplicatedStorage', 'ServerStorage', 'Sound',
             'Animation', 'Humanoid', 'Part', 'Model', 'Folder', 'RemoteEvent', 'RemoteFunction', 'BindableEvent'
         ]);
         this.reservedWords = new Set(['and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while']);
-        this.varMap = new Map();
-        this.funcMap = new Map();
-        this.counter = 1;
     }
 
     random() {
@@ -44,127 +32,120 @@ class LuaObfuscator {
         return x - Math.floor(x);
     }
 
-    generateName(prefix = '_v') {
-        return prefix + Math.floor(this.random() * 99999 + 1000).toString(36);
+    generateName(prefix) {
+        const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = prefix;
+        const length = Math.floor(this.random() * 6) + 3;
+        for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(this.random() * chars.length));
+        }
+        return result;
     }
 
-    isGlobalIdentifier(name) {
-        if (!this.options.preserveGlobals) return false;
-        return this.globalApiNames.has(name) || name.startsWith('_G') || name === '_G';
-    }
-
-    isApiIdentifier(name) {
-        if (!this.options.preserveAPI) return false;
-        return this.globalApiNames.has(name);
+    isProtected(name) {
+        return this.globalApiNames.has(name) || this.reservedWords.has(name) || name.startsWith('_G');
     }
 
     obfuscate(sourceCode) {
-        if (!sourceCode || !sourceCode.trim()) throw new Error('Source code is empty');
+        if (!sourceCode || !sourceCode.trim()) {
+            throw new Error('Source code is empty');
+        }
+
         let code = sourceCode;
-
-        if (this.options.renameVariables || this.options.renameFunctions) {
-            code = this.renameIdentifiers(code);
-        }
-
-        if (this.options.stringProtection) {
-            code = this.protectStrings(code);
-        }
-
-        if (this.options.constantTransform) {
-            code = this.transformNumbers(code);
-        }
-
-        if (this.options.controlFlow) {
-            code = this.transformControlFlow(code);
-        }
-
-        if (this.options.deadCode) {
-            code = this.insertDeadCode(code);
-        }
-
-        if (this.options.minify) {
-            code = this.minify(code);
-        }
-
-        this.validateLuaSyntax(code);
+        
+        // Step 1: Rename local variables and functions
+        code = this.renameLocals(code);
+        
+        // Step 2: Protect strings
+        code = this.protectStrings(code);
+        
+        // Step 3: Transform numbers
+        code = this.transformNumbers(code);
+        
+        // Step 4: Minify
+        code = this.minify(code);
+        
+        // Step 5: Validate
+        this.validateSyntax(code);
+        
         return code;
     }
 
-    validateLuaSyntax(code) {
+    renameLocals(code) {
         const lines = code.split('\n');
-        let openBrackets = 0;
-        let inString = false;
-        let stringChar = '';
+        let result = [];
         
         for (let line of lines) {
-            for (let i = 0; i < line.length; i++) {
-                const ch = line[i];
-                if (inString) {
-                    if (ch === stringChar) inString = false;
-                    continue;
+            // Match local variable declarations
+            const localVarRegex = /^(\s*)local\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(=|$)/;
+            const match = line.match(localVarRegex);
+            
+            if (match && !this.isProtected(match[2])) {
+                const indent = match[1];
+                const oldName = match[2];
+                const newName = this.generateName('_');
+                
+                this.varMap.set(oldName, newName);
+                
+                // Replace the declaration
+                line = line.replace(oldName, newName);
+                
+                // Replace all other occurrences in this line
+                if (this.varMap.has(oldName)) {
+                    line = line.replace(new RegExp('\\b' + oldName + '\\b', 'g'), newName);
                 }
-                if (ch === '"' || ch === "'") {
-                    inString = true;
-                    stringChar = ch;
-                    continue;
-                }
-                if (ch === '(' || ch === '{' || ch === '[') openBrackets++;
-                else if (ch === ')' || ch === '}' || ch === ']') openBrackets--;
-                if (openBrackets < 0) throw new Error('Unbalanced brackets');
             }
+            
+            // Match function declarations
+            const funcRegex = /^(\s*)function\s+([a-zA-Z_][a-zA-Z0-9_]*)/;
+            const funcMatch = line.match(funcRegex);
+            
+            if (funcMatch && !this.isProtected(funcMatch[2])) {
+                const oldName = funcMatch[2];
+                const newName = this.generateName('_f');
+                
+                this.funcMap.set(oldName, newName);
+                line = line.replace(oldName, newName);
+            }
+            
+            // Replace mapped names in non-string parts
+            line = this.replaceMappedNames(line);
+            
+            result.push(line);
         }
-        if (inString) throw new Error('Unclosed string');
-        if (openBrackets !== 0) throw new Error('Unbalanced brackets');
-        return true;
+        
+        return result.join('\n');
     }
 
-    renameIdentifiers(code) {
+    replaceMappedNames(line) {
         let result = '';
-        const localVarRegex = /\blocal\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
-        const funcDefRegex = /\bfunction\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
-        
-        let candidates = new Set();
-        let match;
-        while ((match = localVarRegex.exec(code)) !== null) {
-            if (!this.isGlobalIdentifier(match[1]) && !this.isApiIdentifier(match[1])) candidates.add(match[1]);
-        }
-        while ((match = funcDefRegex.exec(code)) !== null) {
-            if (!this.isGlobalIdentifier(match[1]) && !this.isApiIdentifier(match[1])) candidates.add(match[1]);
-        }
-
-        for (let name of candidates) {
-            if (!this.varMap.has(name) && !this.funcMap.has(name)) {
-                if (this.options.renameVariables) {
-                    this.varMap.set(name, this.generateName('_v'));
-                }
-                if (this.options.renameFunctions && name.match(/^[a-z]/i)) {
-                    this.funcMap.set(name, this.generateName('_f'));
-                }
-            }
-        }
-
         let inString = false;
         let stringChar = '';
-        for (let i = 0; i < code.length; i++) {
-            const ch = code[i];
+        
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            
             if (inString) {
                 result += ch;
                 if (ch === stringChar) inString = false;
                 continue;
             }
-            if (ch === '"' || ch === "'" || ch === '`') {
+            
+            if (ch === '"' || ch === "'") {
                 inString = true;
                 stringChar = ch;
                 result += ch;
                 continue;
             }
+            
             if (/[a-zA-Z_]/.test(ch)) {
                 let word = '';
                 let j = i;
-                while (j < code.length && /[a-zA-Z0-9_]/.test(code[j])) {
-                    word += code[j];
+                while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) {
+                    word += line[j];
                     j++;
                 }
+                
                 if (this.varMap.has(word)) {
                     result += this.varMap.get(word);
                 } else if (this.funcMap.has(word)) {
@@ -177,6 +158,7 @@ class LuaObfuscator {
                 result += ch;
             }
         }
+        
         return result;
     }
 
@@ -188,33 +170,41 @@ class LuaObfuscator {
         
         for (let i = 0; i < code.length; i++) {
             const ch = code[i];
+            
             if (inString) {
                 if (ch === stringChar) {
                     inString = false;
-                    result += this.stringToConcat(currentString);
+                    result += this.encodeString(currentString);
                     currentString = '';
                 } else {
                     currentString += ch;
                 }
                 continue;
             }
+            
             if (ch === '"' || ch === "'") {
                 inString = true;
                 stringChar = ch;
                 result += ch;
                 continue;
             }
+            
             result += ch;
         }
+        
         return result;
     }
 
-    stringToConcat(str) {
+    encodeString(str) {
         if (str.length < 4) return `"${str}"`;
+        
         const chunks = [];
-        for (let i = 0; i < str.length; i += 3) {
-            chunks.push(`"${str.slice(i, i + 3)}"`);
+        const chunkSize = 2 + Math.floor(this.random() * 3);
+        
+        for (let i = 0; i < str.length; i += chunkSize) {
+            chunks.push(`"${str.slice(i, i + chunkSize)}"`);
         }
+        
         if (chunks.length < 2) return `"${str}"`;
         return `(${chunks.join(' .. ')})`;
     }
@@ -223,76 +213,93 @@ class LuaObfuscator {
         return code.replace(/\b(\d+)\b/g, (match, num) => {
             const n = parseInt(num);
             if (n < 5 || n > 9999) return match;
+            
             const variant = Math.floor(this.random() * 3);
             if (variant === 0) return `(${n - 1} + 1)`;
-            else if (variant === 1) return `(${n} * 1)`;
+            else if (variant === 1) return `(${Math.floor(n / 2)} + ${Math.ceil(n / 2)})`;
             else return `(0 + ${n})`;
         });
     }
 
-    transformControlFlow(code) {
-        let lines = code.split('\n');
-        let transformed = [];
-        for (let line of lines) {
-            if (line.trim().startsWith('local') && this.random() > 0.6) {
-                transformed.push(`if (${Math.floor(this.random() * 10)} > ${Math.floor(this.random() * 5)}) then`);
-                transformed.push('  ' + line);
-                transformed.push('end');
-            } else {
-                transformed.push(line);
-            }
-        }
-        return transformed.join('\n');
-    }
-
-    insertDeadCode(code) {
-        const deadSnippet = `
--- dead code start
-local _dead${Math.floor(this.random() * 999)} = ${Math.floor(this.random() * 100)}
-if _dead${Math.floor(this.random() * 999)} == ${Math.floor(this.random() * 100)} then
-  local _unused = ${Math.floor(this.random() * 50)}
-end
--- dead code end
-`;
-        return code + '\n' + deadSnippet;
-    }
-
     minify(code) {
+        // Remove comments
         let result = '';
-        let inBlockComment = false;
         let inString = false;
         let stringChar = '';
+        let inComment = false;
         
         for (let i = 0; i < code.length; i++) {
             const ch = code[i];
+            
             if (inString) {
                 result += ch;
                 if (ch === stringChar) inString = false;
                 continue;
             }
+            
             if (ch === '"' || ch === "'") {
                 inString = true;
                 stringChar = ch;
                 result += ch;
                 continue;
             }
-            if (inBlockComment) {
-                if (ch === ']' && code[i - 1] === ']') inBlockComment = false;
-                continue;
-            }
-            if (ch === '-' && code[i + 1] === '-') {
-                if (code[i + 2] === '[') {
-                    inBlockComment = true;
-                    i += 2;
-                    continue;
+            
+            if (inComment) {
+                if (ch === '\n') {
+                    inComment = false;
+                    result += ch;
                 }
-                while (i < code.length && code[i] !== '\n') i++;
                 continue;
             }
+            
+            if (ch === '-' && code[i + 1] === '-') {
+                inComment = true;
+                i++;
+                continue;
+            }
+            
             result += ch;
         }
+        
+        // Remove extra blank lines
         result = result.replace(/\n\s*\n/g, '\n');
+        
         return result.trim();
+    }
+
+    validateSyntax(code) {
+        // Basic validation
+        const lines = code.split('\n');
+        let openBrackets = 0;
+        let inString = false;
+        let stringChar = '';
+        
+        for (let line of lines) {
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                
+                if (inString) {
+                    if (ch === stringChar) inString = false;
+                    continue;
+                }
+                
+                if (ch === '"' || ch === "'") {
+                    inString = true;
+                    stringChar = ch;
+                    continue;
+                }
+                
+                if (ch === '(' || ch === '{' || ch === '[') openBrackets++;
+                else if (ch === ')' || ch === '}' || ch === ']') openBrackets--;
+                
+                if (openBrackets < 0) throw new Error('Unbalanced brackets at line ' + (lines.indexOf(line) + 1));
+            }
+        }
+        
+        if (inString) throw new Error('Unclosed string');
+        if (openBrackets !== 0) throw new Error('Unbalanced brackets');
+        
+        return true;
     }
 }
 

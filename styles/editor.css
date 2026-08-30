@@ -1,0 +1,135 @@
+/* Editor Specific Styles */
+.monaco-editor {
+    --vscode-focusBorder: #6C63FF;
+    --vscode-editor-background: #0a0a0f;
+    --vscode-editor-foreground: #FFFFFF;
+    --vscode-editorLineNumber-foreground: #4A4A5E;
+    --vscode-editorLineNumber-activeForeground: #6C63FF;
+    --vscode-editor-selectionBackground: rgba(108, 99, 255, 0.2);
+    --vscode-editor-hoverHighlightBackground: rgba(108, 99, 255, 0.1);
+    --vscode-editor-wordHighlightBackground: rgba(108, 99, 255, 0.1);
+    --vscode-editor-findMatchBackground: rgba(255, 107, 107, 0.3);
+    --vscode-editor-findMatchHighlightBackground: rgba(255, 107, 107, 0.2);
+    --vscode-editor-gutter-background: #0a0a0f;
+    --vscode-editor-widget-background: #1a1a2e;
+    --vscode-editor-widget-border: rgba(255, 255, 255, 0.1);
+    --vscode-editor-hoverWidget-background: #1a1a2e;
+    --vscode-editor-hoverWidget-border: rgba(255, 255, 255, 0.1);
+    --vscode-editor-suggestWidget-background: #1a1a2e;
+    --vscode-editor-suggestWidget-border: rgba(255, 255, 255, 0.1);
+    --vscode-editor-suggestWidget-selectedBackground: rgba(108, 99, 255, 0.2);
+}
+
+/* Diff Editor Styles */
+.diff-container {
+    min-height: 500px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+}
+
+/* Editor Header Enhancement */
+.editor-header {
+    position: relative;
+    overflow: hidden;
+}
+
+.editor-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        var(--primary-color) 0%, 
+        transparent 100%);
+}
+
+.editor-label {
+    position: relative;
+    display: inline-block;
+}
+
+.editor-label::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--primary-color);
+    transform: scaleX(0);
+    transition: transform var(--transition-speed);
+    transform-origin: left;
+}
+
+.editor-label:hover::after {
+    transform: scaleX(1);
+}
+
+/* Editor Actions Enhancement */
+.action-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.action-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(108, 99, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: all var(--transition-speed-fast);
+}
+
+.action-btn:active::before {
+    width: 100%;
+    height: 100%;
+}
+
+/* Resize Handle */
+.editor-divider {
+    position: relative;
+    cursor: col-resize;
+}
+
+.editor-divider::after {
+    content: '⋯';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-muted);
+    font-size: 16px;
+}
+
+.editor-divider:hover {
+    background: rgba(108, 99, 255, 0.1);
+}
+
+/* Mobile Editor Adjustments */
+@media (max-width: 768px) {
+    .editor-divider {
+        cursor: row-resize;
+    }
+    
+    .editor-divider::after {
+        content: '⋯';
+        transform: translate(-50%, -50%) rotate(90deg);
+    }
+    
+    .editor-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .editor-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

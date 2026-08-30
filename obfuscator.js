@@ -1,6 +1,6 @@
 /**
- * APEX HUB OBFUSCATOR - Advanced Lua/Luau Obfuscation Engine
- * Version 2.0 - Real tokenizer-based transformation
+ * APEX HUB OBFUSCATOR - Production Engine
+ * Tokenizer-based, syntax-safe transformations
  */
 
 class LuaTokenizer {
@@ -26,15 +26,15 @@ class LuaTokenizer {
                 continue;
             }
             
-            // String
-            if (ch === '"' || ch === "'") {
-                this.tokens.push(this.readString(ch));
+            // Long string
+            if (ch === '[' && (this.source[this.pos + 1] === '[' || this.source[this.pos + 1] === '=')) {
+                this.tokens.push(this.readLongString());
                 continue;
             }
             
-            // Long string
-            if (ch === '[' && this.source[this.pos + 1] === '[') {
-                this.tokens.push(this.readLongString());
+            // String
+            if (ch === '"' || ch === "'") {
+                this.tokens.push(this.readString(ch));
                 continue;
             }
             
@@ -66,7 +66,6 @@ class LuaTokenizer {
     skipComment() {
         this.pos += 2;
         if (this.source[this.pos] === '[') {
-            // Long comment
             while (this.pos < this.source.length) {
                 if (this.source[this.pos] === ']' && this.source[this.pos + 1] === ']') {
                     this.pos += 2;
@@ -75,7 +74,6 @@ class LuaTokenizer {
                 this.pos++;
             }
         } else {
-            // Line comment
             while (this.pos < this.source.length && this.source[this.pos] !== '\n') {
                 this.pos++;
             }
@@ -85,75 +83,91 @@ class LuaTokenizer {
     readString(quote) {
         const start = this.pos;
         this.pos++;
-        let result = quote;
+        let value = quote;
         while (this.pos < this.source.length) {
             const ch = this.source[this.pos];
             if (ch === '\\' && this.pos + 1 < this.source.length) {
-                result += ch + this.source[this.pos + 1];
+                value += ch + this.source[this.pos + 1];
                 this.pos += 2;
                 continue;
             }
             if (ch === quote) {
-                result += ch;
+                value += ch;
                 this.pos++;
                 break;
             }
-            result += ch;
+            value += ch;
             this.pos++;
         }
-        return { type: 'string', value: result, start };
+        return { type: 'string', value, start };
     }
 
     readLongString() {
         const start = this.pos;
-        this.pos += 2;
-        let result = '[[';
+        this.pos++;
         let eqCount = 0;
         while (this.pos < this.source.length && this.source[this.pos] === '=') {
             eqCount++;
-            result += '=';
             this.pos++;
         }
         if (this.source[this.pos] === '[') {
-            result += '[';
             this.pos++;
         }
+        
+        let value = '[' + '='.repeat(eqCount) + '[';
         const endMarker = ']' + '='.repeat(eqCount) + ']';
+        
         while (this.pos < this.source.length) {
             if (this.source.startsWith(endMarker, this.pos)) {
-                result += endMarker;
+                value += endMarker;
                 this.pos += endMarker.length;
                 break;
             }
-            result += this.source[this.pos];
+            value += this.source[this.pos];
             this.pos++;
         }
-        return { type: 'long_string', value: result, start };
+        
+        return { type: 'long_string', value, start };
     }
 
     readNumber() {
         const start = this.pos;
-        let result = '';
+        let value = '';
+        
         while (this.pos < this.source.length) {
             const ch = this.source[this.pos];
-            if (this.isDigit(ch) || ch === '.' || ch === 'e' || ch === 'E' || ch === '+' || ch === '-' || ch === 'x' || ch === 'X' || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
-                result += ch;
+            if (this.isDigit(ch) || ch === '.' || ch === 'e' || ch === 'E' || 
+                ch === '+' || ch === '-' || ch === 'x' || ch === 'X' ||
+                (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+                value += ch;
                 this.pos++;
             } else {
                 break;
             }
         }
-        return { type: 'number', value: result, start };
+        
+        return { type: 'number', value, start };
     }
 
     readIdentifier() {
         const start = this.pos;
-        let result = '';
+        let value = '';
         while (this.pos < this.source.length && this.isIdentifierPart(this.source[this.pos])) {
-            result += this.source[this.pos];
+            value += this.source[this.pos];
             this.pos++;
         }
-        return { type: 'identifier', value: result, start };
+        
+        const keywords = new Set([
+            'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function',
+            'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true',
+            'until', 'while', 'continue', 'type', 'export'
+        ]);
+        
+        return {
+            type: keywords.has(value) ? 'keyword' : 'identifier',
+            value,
+            start
+        };
     }
 
     readOperator() {
@@ -264,6 +278,8 @@ class LuaObfuscatorEngine {
         const tokenizer = new LuaTokenizer(code);
         const tokens = tokenizer.tokenize();
         
+        // Validate original syntax first
+        this.validateTokens(tokens);
         log.push('Tokenizing...');
         
         if (this.options.renameVariables) {
@@ -302,21 +318,10 @@ class LuaObfuscatorEngine {
             this.stats.passesApplied++;
         }
         
-        if (this.options.controlFlow) {
-            log.push('Applying control flow...');
-            code = this.transformControlFlow(code);
-            this.stats.passesApplied++;
-        }
-        
         if (this.options.minify) {
             log.push('Minifying...');
             code = this.minify(code);
             this.stats.passesApplied++;
-        }
-        
-        if (this.options.packedOutput) {
-            log.push('Packing output...');
-            code = this.packOutput(code);
         }
         
         log.push('Validating output...');
@@ -330,6 +335,18 @@ class LuaObfuscatorEngine {
         };
     }
 
+    validateTokens(tokens) {
+        let bracketCount = 0;
+        for (const token of tokens) {
+            if (token.type === 'operator') {
+                if (token.value === '(' || token.value === '{' || token.value === '[') bracketCount++;
+                if (token.value === ')' || token.value === '}' || token.value === ']') bracketCount--;
+                if (bracketCount < 0) throw new Error('Unbalanced brackets');
+            }
+        }
+        if (bracketCount !== 0) throw new Error('Unbalanced brackets');
+    }
+
     renameIdentifiers(code) {
         const tokenizer = new LuaTokenizer(code);
         const tokens = tokenizer.tokenize();
@@ -337,14 +354,37 @@ class LuaObfuscatorEngine {
         // Collect local variable names
         const localVars = new Set();
         for (let i = 0; i < tokens.length; i++) {
-            if (tokens[i].type === 'identifier' && tokens[i].value === 'local' && i + 1 < tokens.length) {
+            // Local variable declaration
+            if (tokens[i].type === 'keyword' && tokens[i].value === 'local' && i + 1 < tokens.length) {
                 if (tokens[i + 1].type === 'identifier' && !this.protectedNames.has(tokens[i + 1].value)) {
                     localVars.add(tokens[i + 1].value);
                 }
             }
-            if (tokens[i].type === 'identifier' && tokens[i].value === 'function' && i + 1 < tokens.length) {
+            // Function declaration
+            if (tokens[i].type === 'keyword' && tokens[i].value === 'function' && i + 1 < tokens.length) {
                 if (tokens[i + 1].type === 'identifier' && !this.protectedNames.has(tokens[i + 1].value)) {
                     localVars.add(tokens[i + 1].value);
+                }
+            }
+            // Function parameters
+            if (tokens[i].type === 'keyword' && tokens[i].value === 'function') {
+                let j = i + 1;
+                let parenCount = 0;
+                while (j < tokens.length) {
+                    if (tokens[j].type === 'operator' && tokens[j].value === '(') {
+                        parenCount++;
+                        j++;
+                        while (j < tokens.length && parenCount > 0) {
+                            if (tokens[j].type === 'operator' && tokens[j].value === '(') parenCount++;
+                            if (tokens[j].type === 'operator' && tokens[j].value === ')') parenCount--;
+                            if (parenCount > 0 && tokens[j].type === 'identifier' && !this.protectedNames.has(tokens[j].value)) {
+                                localVars.add(tokens[j].value);
+                            }
+                            j++;
+                        }
+                        break;
+                    }
+                    j++;
                 }
             }
         }
@@ -358,10 +398,9 @@ class LuaObfuscatorEngine {
             }
         }
         
-        // Replace identifiers
+        // Replace identifiers (only identifier tokens, not strings or keywords)
         let result = '';
-        for (let i = 0; i < tokens.length; i++) {
-            const token = tokens[i];
+        for (const token of tokens) {
             if (token.type === 'identifier' && this.varMap.has(token.value)) {
                 result += this.varMap.get(token.value);
             } else {
@@ -380,14 +419,14 @@ class LuaObfuscatorEngine {
         for (const token of tokens) {
             if (token.type === 'string' && token.value.length > 4) {
                 const content = token.value.slice(1, -1);
-                if (content.length >= 3) {
+                if (content.length >= 3 && !content.includes('\n')) {
                     const chunks = [];
                     const chunkSize = 2 + Math.floor(this.random() * 3);
                     for (let i = 0; i < content.length; i += chunkSize) {
                         chunks.push(content.slice(i, i + chunkSize));
                     }
                     if (chunks.length > 1) {
-                        result += '(' + chunks.map(c => `"${c}"`).join(' .. ') + ')';
+                        result += '(' + chunks.map(c => `"${c}"`).join('..') + ')';
                         this.stats.stringsProtected++;
                         continue;
                     }
@@ -420,7 +459,6 @@ class LuaObfuscatorEngine {
         
         // Build pool
         const pool = Array.from(stringSet);
-        this.stringPool = pool;
         
         // Shuffle pool
         for (let i = pool.length - 1; i > 0; i--) {
@@ -430,7 +468,7 @@ class LuaObfuscatorEngine {
         
         // Create pool variable
         const poolVar = this.generateName('_pool');
-        const poolCode = `local ${poolVar} = {${pool.map(s => `"${s}"`).join(',')}};\n`;
+        const poolCode = `local ${poolVar}={${pool.map(s => `"${s}"`).join(',')}};`;
         
         // Replace strings with pool references
         let result = poolCode;
@@ -460,11 +498,11 @@ class LuaObfuscatorEngine {
                 if (Number.isInteger(num) && num > 5 && num < 9999 && !token.value.includes('.')) {
                     const variant = Math.floor(this.random() * 3);
                     if (variant === 0) {
-                        result += `(${num - 1} + 1)`;
+                        result += `(${num - 1}+1)`;
                     } else if (variant === 1) {
-                        result += `(${Math.floor(num / 2)} + ${Math.ceil(num / 2)})`;
+                        result += `(${Math.floor(num / 2)}+${Math.ceil(num / 2)})`;
                     } else {
-                        result += `(0 + ${num})`;
+                        result += `(0+${num})`;
                     }
                     this.stats.constantsTransformed++;
                     continue;
@@ -483,49 +521,19 @@ class LuaObfuscatorEngine {
         for (let i = 0; i < count; i++) {
             const varName = this.generateName('_j');
             const value = Math.floor(this.random() * 1000);
-            junkVars.push(`local ${varName} = ${value};`);
+            junkVars.push(`local ${varName}=${value};`);
         }
         
-        const junkBlock = `\n-- Junk code\n${junkVars.join('\n')}\n`;
+        const junkBlock = `${junkVars.join('')}`;
         this.stats.junkBlocksAdded += count;
         
         return junkBlock + code;
     }
 
     addDeadCode(code) {
-        const deadVar = this.generateName('_dead');
-        const deadBlock = `
-local ${deadVar} = ${Math.floor(this.random() * 100)};
-if false then
-    local ${this.generateName('_x')} = {};
-    for i = 1, 10 do
-        ${this.generateName('_x')}[i] = i * ${Math.floor(this.random() * 50)};
-    end
-end;
-`;
+        const deadVar = this.generateName('_d');
+        const deadBlock = `local ${deadVar}=${Math.floor(this.random() * 100)};if false then local ${this.generateName('_x')}={};for i=1,10 do ${this.generateName('_x')}[i]=i*${Math.floor(this.random() * 50)};end;end;`;
         return deadBlock + code;
-    }
-
-    transformControlFlow(code) {
-        // Safe control flow transformation - wrap simple statements
-        const lines = code.split('\n');
-        const result = [];
-        
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('local ') && !trimmed.includes('function') && this.random() > 0.7) {
-                const predVar = this.generateName('_p');
-                const predValue = Math.floor(this.random() * 100);
-                result.push(`local ${predVar} = ${predValue};`);
-                result.push(`if ${predVar} == ${predValue} then`);
-                result.push('  ' + line);
-                result.push('end;');
-            } else {
-                result.push(line);
-            }
-        }
-        
-        return result.join('\n');
     }
 
     minify(code) {
@@ -569,45 +577,17 @@ end;
         }
         
         // Remove extra whitespace
-        result = result.replace(/\n\s*\n/g, '\n');
-        result = result.replace(/[ \t]+/g, ' ');
+        result = result.replace(/\s+/g, ' ');
+        result = result.replace(/\s*([=+\-*/%^#<>])\s*/g, '$1');
+        result = result.replace(/\s*([(){}[\];,.])\s*/g, '$1');
         
         return result.trim();
-    }
-
-    packOutput(code) {
-        // Convert to single line where safe
-        const lines = code.split('\n').filter(l => l.trim());
-        return lines.join(' ');
     }
 
     validateSyntax(code) {
         const tokenizer = new LuaTokenizer(code);
         const tokens = tokenizer.tokenize();
-        
-        // Check bracket balance
-        let bracketCount = 0;
-        let inString = false;
-        let stringChar = '';
-        
-        for (const token of tokens) {
-            if (token.type === 'string') {
-                continue;
-            }
-            
-            const val = token.value;
-            if (val === '(' || val === '{' || val === '[') bracketCount++;
-            if (val === ')' || val === '}' || val === ']') bracketCount--;
-            
-            if (bracketCount < 0) {
-                throw new Error(`Unbalanced brackets at position ${token.start}`);
-            }
-        }
-        
-        if (bracketCount !== 0) {
-            throw new Error('Unbalanced brackets');
-        }
-        
+        this.validateTokens(tokens);
         return true;
     }
 }
@@ -619,18 +599,21 @@ function obfuscate(source, options = {}) {
 }
 
 function validateLua(source) {
-    const tokenizer = new LuaTokenizer(source);
-    const tokens = tokenizer.tokenize();
-    
-    let bracketCount = 0;
-    for (const token of tokens) {
-        const val = token.value;
-        if (val === '(' || val === '{' || val === '[') bracketCount++;
-        if (val === ')' || val === '}' || val === ']') bracketCount--;
-        if (bracketCount < 0) return false;
+    try {
+        const tokenizer = new LuaTokenizer(source);
+        const tokens = tokenizer.tokenize();
+        let bracketCount = 0;
+        for (const token of tokens) {
+            if (token.type === 'operator') {
+                if (token.value === '(' || token.value === '{' || token.value === '[') bracketCount++;
+                if (token.value === ')' || token.value === '}' || token.value === ']') bracketCount--;
+                if (bracketCount < 0) return false;
+            }
+        }
+        return bracketCount === 0;
+    } catch (e) {
+        return false;
     }
-    
-    return bracketCount === 0;
 }
 
 function runSelfTest() {
@@ -639,7 +622,8 @@ function runSelfTest() {
         `local x = 100\nprint(x)`,
         `local Players = game:GetService("Players")`,
         `local function add(a,b)\n    return a+b\nend\nprint(add(1,2))`,
-        `local t = {\n    Name = "Test",\n    Value = 100\n}`,
+        `local data = {\n    Name = "Test",\n    Value = 100\n}`,
+        `for i = 1, 10 do\n    print(i)\nend`,
         `game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(character)\n    print(character.Name)\nend)`
     ];
     

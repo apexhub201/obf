@@ -3,88 +3,238 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APEX HUB • Lua Obfuscator</title>
+    <title>APEX HUB OBFUSCATOR - Advanced Lua/Luau Protection Suite</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/app.css">
+    <link rel="stylesheet" href="styles/glass.css">
+    <link rel="stylesheet" href="styles/editor.css">
+    <link rel="stylesheet" href="styles/animations.css">
 </head>
 <body>
-    <div class="app-wrapper">
-        <header class="header">
-            <div class="brand">
-                <div class="brand-logo">A</div>
-                <h1>APEX HUB <span>Lua/Luau Obfuscator</span></h1>
-                <span class="badge">LUA/LUAU</span>
+    <div class="background-grid"></div>
+    
+    <div class="app-container">
+        <header class="header glass-panel">
+            <div class="logo-container">
+                <div class="logo-a">A</div>
+                <div class="logo-text">
+                    <span class="logo-title">APEX HUB</span>
+                    <span class="logo-subtitle">OBFUSCATOR</span>
+                </div>
+                <div class="badge">LUA / LUAU</div>
+                <div class="version">v1.0</div>
             </div>
-            <nav class="nav">
-                <span class="active">Obfuscator</span>
-                <span>Settings</span>
-                <span>Documentation</span>
-                <span>About</span>
-            </nav>
+            <div class="header-right">
+                <div class="engine-status">
+                    <span class="status-dot"></span>
+                    <span>ENGINE ONLINE</span>
+                </div>
+                <button class="settings-btn" id="settingsBtn" aria-label="Settings">⚙</button>
+            </div>
         </header>
 
-        <div class="editor-grid">
-            <div class="glass-panel">
-                <div class="editor-header">
-                    INPUT SOURCE
-                    <div class="counter" id="inputCounter">Lines: 0 | Chars: 0</div>
-                </div>
-                <div id="inputEditor" class="editor-container"></div>
+        <main class="main-content">
+            <div class="subtitle">
+                <span>Advanced Lua / Luau Protection Suite</span>
             </div>
-            <div class="glass-panel">
-                <div class="editor-header">
-                    OBFUSCATED OUTPUT
-                    <div class="counter" id="outputCounter">Lines: 0 | Chars: 0</div>
-                </div>
-                <div id="outputEditor" class="editor-container"></div>
-            </div>
-        </div>
 
-        <div class="glass-panel settings-panel">
-            <div class="settings-header">
-                <div class="preset-buttons">
-                    <button class="btn" data-preset="safe">SAFE</button>
-                    <button class="btn" data-preset="balanced">BALANCED</button>
-                    <button class="btn" data-preset="strong">STRONG</button>
-                    <button class="btn" data-preset="extreme">EXTREME</button>
+            <div class="editor-section glass-panel">
+                <div class="editors-container">
+                    <div class="editor-wrapper">
+                        <div class="editor-header">
+                            <span class="editor-label">INPUT SOURCE</span>
+                            <div class="editor-actions">
+                                <button class="action-btn" id="pasteBtn" title="Paste from clipboard">📋 Paste</button>
+                                <button class="action-btn" id="uploadBtn" title="Upload file">📁 Upload</button>
+                                <button class="action-btn" id="clearBtn" title="Clear">🗑 Clear</button>
+                                <input type="file" id="fileInput" accept=".lua,.luau" style="display: none;">
+                            </div>
+                        </div>
+                        <div id="inputEditor" class="monaco-editor-container"></div>
+                    </div>
+                    <div class="editor-divider"></div>
+                    <div class="editor-wrapper">
+                        <div class="editor-header">
+                            <span class="editor-label">OBFUSCATED OUTPUT</span>
+                            <div class="editor-actions">
+                                <button class="action-btn" id="copyBtn" title="Copy output">📄 Copy</button>
+                                <button class="action-btn" id="downloadBtn" title="Download">💾 Download</button>
+                                <button class="action-btn" id="selectAllBtn" title="Select all">✓ Select All</button>
+                            </div>
+                        </div>
+                        <div id="outputEditor" class="monaco-editor-container"></div>
+                    </div>
                 </div>
-                <button class="btn" id="testEngineBtn">RUN ENGINE TEST</button>
             </div>
-            <div class="toggle-group">
-                <label class="toggle-item"><input type="checkbox" id="optRename" checked> Variable Rename</label>
-                <label class="toggle-item"><input type="checkbox" id="optStringProtect" checked> String Protection</label>
-                <label class="toggle-item"><input type="checkbox" id="optStringPool" checked> String Pool</label>
-                <label class="toggle-item"><input type="checkbox" id="optConstObf" checked> Constant Obfuscation</label>
-                <label class="toggle-item"><input type="checkbox" id="optJunk" checked> Junk Code</label>
-                <label class="toggle-item"><input type="checkbox" id="optDeadCode" checked> Dead Code</label>
-                <label class="toggle-item"><input type="checkbox" id="optOpaque" checked> Opaque Predicates</label>
-                <label class="toggle-item"><input type="checkbox" id="optControlFlow" checked> Control Flow</label>
-                <label class="toggle-item"><input type="checkbox" id="optMinify" checked> Minify</label>
-                <label class="toggle-item"><input type="checkbox" id="optPacked" checked> Packed Output</label>
+
+            <div class="tabs glass-panel">
+                <div class="tab active" data-tab="source">SOURCE</div>
+                <div class="tab" data-tab="output">OUTPUT</div>
+                <div class="tab" data-tab="diff">DIFF</div>
+                <div class="tab" data-tab="settings">SETTINGS</div>
+                <div class="tab" data-tab="tests">TESTS</div>
             </div>
-            <div class="obfuscate-wrapper">
-                <button class="btn-obfuscate" id="obfuscateBtn">⚡ OBFUSCATE</button>
+
+            <div class="tab-content glass-panel active" id="tab-source">
+                <div class="protection-section">
+                    <h3>PROTECTION</h3>
+                    <div class="presets">
+                        <button class="preset-btn" data-preset="safe">SAFE</button>
+                        <button class="preset-btn" data-preset="balanced">BALANCED</button>
+                        <button class="preset-btn active" data-preset="strong">STRONG</button>
+                        <button class="preset-btn" data-preset="extreme">EXTREME</button>
+                    </div>
+                    <div class="protection-toggles">
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Variable Rename
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> String Protection
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> String Pool
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Constant Transform
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Junk Code
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Dead Code
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Opaque Predicates
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Control Flow
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Table Transform
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" checked> Packing
+                            <span class="toggle-indicator">● ON</span>
+                        </label>
+                    </div>
+                    <button class="build-btn" id="buildBtn">
+                        ⚡ BUILD OBFUSCATION
+                    </button>
+                    <button class="cancel-btn" id="cancelBtn" style="display: none;">
+                        CANCEL BUILD
+                    </button>
+                </div>
             </div>
-            <div id="buildLog" class="build-log"></div>
-            <div id="statsPanel" class="stats-panel"></div>
-        </div>
+
+            <div class="tab-content glass-panel" id="tab-output">
+                <div class="build-log">
+                    <h3>BUILD LOG</h3>
+                    <div id="buildLog" class="log-content">
+                        <div class="log-entry">Analyzing → Transforming → Validating → Complete</div>
+                    </div>
+                </div>
+                <div class="stats-section">
+                    <h3>STATS</h3>
+                    <div class="stats-grid" id="statsGrid">
+                        <div class="stat-item"><label>Original Size</label><span id="originalSize">0 KB</span></div>
+                        <div class="stat-item"><label>Output Size</label><span id="outputSize">0 KB</span></div>
+                        <div class="stat-item"><label>Passes Applied</label><span id="passesApplied">0</span></div>
+                        <div class="stat-item"><label>Strings Protected</label><span id="stringsProtected">0</span></div>
+                        <div class="stat-item"><label>Variables Renamed</label><span id="varsRenamed">0</span></div>
+                        <div class="stat-item"><label>Junk Blocks</label><span id="junkBlocks">0</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content glass-panel" id="tab-diff">
+                <div id="diffEditor" class="monaco-editor-container diff-container"></div>
+            </div>
+
+            <div class="tab-content glass-panel" id="tab-settings">
+                <div class="advanced-settings">
+                    <h3>ADVANCED SETTINGS</h3>
+                    <div class="settings-grid">
+                        <label>Seed: <input type="number" id="seedInput" value="12345"></label>
+                        <label>Identifier Style: 
+                            <select id="identStyle">
+                                <option value="short">SHORT</option>
+                                <option value="random">RANDOM</option>
+                                <option value="confusing">CONFUSING</option>
+                                <option value="long">LONG</option>
+                                <option value="mixed">MIXED</option>
+                            </select>
+                        </label>
+                        <label>String Mode: 
+                            <select id="stringMode">
+                                <option value="none">NONE</option>
+                                <option value="split">SPLIT</option>
+                                <option value="encoded">ENCODED</option>
+                                <option value="pool">POOL</option>
+                                <option value="runtime">RUNTIME</option>
+                                <option value="adaptive">ADAPTIVE</option>
+                            </select>
+                        </label>
+                        <label>Junk Density: <input type="range" id="junkDensity" min="0" max="200" value="50"></label>
+                        <label>Control Flow Level: 
+                            <select id="cflowLevel">
+                                <option value="off">OFF</option>
+                                <option value="low">LOW</option>
+                                <option value="medium">MEDIUM</option>
+                                <option value="high">HIGH</option>
+                                <option value="extreme">EXTREME</option>
+                            </select>
+                        </label>
+                        <label>Packing Level: <input type="range" id="packLevel" min="0" max="3" value="2"></label>
+                        <label>Maximum Output Size: 
+                            <select id="maxOutput">
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                                <option value="3">3x</option>
+                                <option value="5">5x</option>
+                                <option value="10">10x</option>
+                                <option value="unlimited">Unlimited</option>
+                            </select>
+                        </label>
+                        <label><input type="checkbox" id="preserveApis" checked> Preserve Roblox APIs</label>
+                        <label><input type="checkbox" id="preserveGlobals" checked> Preserve Globals</label>
+                        <label><input type="checkbox" id="deterministicBuild"> Deterministic Build</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content glass-panel" id="tab-tests">
+                <div class="tests-section">
+                    <h3>ENGINE TEST</h3>
+                    <button class="run-tests-btn" id="runTestsBtn">RUN ALL TESTS</button>
+                    <div id="testResults" class="test-results"></div>
+                </div>
+            </div>
+        </main>
 
         <footer class="footer">
-            <span>APEX HUB • Lua/Luau Developer Tools</span>
-            <span>v2.0.1 • Client-side only</span>
+            <span>Your source code stays in your browser.</span>
+            <span>APEX HUB OBFUSCATOR v1.0 — Client-side processing</span>
         </footer>
     </div>
 
-    <div id="toast" class="toast"></div>
+    <div id="toastContainer" class="toast-container"></div>
+    <div id="modalContainer" class="modal-container"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-    <script>
-        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
-    </script>
-    <script src="obfuscator.js"></script>
-    <script src="app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <script src="src/config.js"></script>
+    <script src="src/state.js"></script>
+    <script src="src/ui.js"></script>
+    <script src="src/app.js"></script>
 </body>
 </html>

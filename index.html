@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APEX HUB • Lua/Luau Obfuscator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.min.css">
+    <style>
+        /* style.css content starts here */
+        :root {
+            --bg: #070b0e;
+            --surface: rgba(18, 25, 32, 0.65);
+            --surface-border: rgba(255, 255, 255, 0.08);
+            --glass-highlight: rgba(255, 255, 255, 0.03);
+            --text: #e5edf2;
+            --text-dim: #92a3b3;
+            --accent: #5eb3f6;
+            --accent-glow: rgba(94, 179, 246, 0.25);
+            --warning: #f5b56b;
+            --success: #6bd5a0;
+            --danger: #f58b8b;
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --radius-sm: 10px;
+            --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 30% 10%, #1a2a35 0%, #0b1013 70%, #05080a 100%);
+            color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem 1.2rem;
+            backdrop-filter: blur(2px);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJmIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjc1IiBudW1PY3RhdmVzPSIzIiAvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNmKSIgb3BhY2l0eT0iMC4wMyIgLz48L3N2Zz4=');
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-wrapper {
+            width: 100%;
+            max-width: 1440px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Glass card */
+        .glass-panel {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft), inset 0 1px 0 var(--glass-highlight);
+            padding: 1.8rem 1.5rem;
+            transition: all 0.25s ease;
+        }
+
+        .glass-panel:hover {
+            border-color: rgba(255, 255, 255, 0.14);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.02) inset;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            gap: 1rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+        }
+
+        .brand-logo {
+            width: 48px;
+            height: 48px;
+            background: rgba(94, 179, 246, 0.12);
+            border: 1px solid rgba(94, 179, 246, 0.3);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: var(--accent);
+            text-shadow: 0 0 16px var(--accent-glow);
+            backdrop-filter: blur(8px);
+        }
+
+        .brand h1 {
+            font-weight: 600;
+            font-size: 1.9rem;
+            letter-spacing: 0.5px;
+            line-height: 1.1;
+        }
+
+        .brand h1 span {
+            font-weight: 300;
+            color: var(--text-dim);
+            font-size: 1.1rem;
+            display: block;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .badge {
+            background: rgba(94, 179, 246, 0.1);
+            border: 1px solid rgba(94, 179, 246, 0.3);
+            color: #b0d7ff;
+            padding: 0.4rem 1rem;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 1px;
+            backdrop-filter: blur(6px);
+            margin-left: 0.5rem;
+        }
+
+        .nav {
+            display: flex;
+            gap: 1.8rem;
+            font-weight: 450;
+            color: var(--text-dim);
+        }
+
+        .nav span {
+            cursor: default;
+            padding: 0.4rem 0;
+            border-bottom: 2px solid transparent;
+            transition: 0.2s;
+            font-size: 0.95rem;
+        }
+
+        .nav span.active {
+            color: var(--text);
+            border-bottom-color: var(--accent);
+        }
+
+        .nav span:not(.active):hover {
+            color: #cbd7e0;
+        }
+
+        /* Editor grid */
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .editor-col {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.7rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .editor-header .counter {
+            display: flex;
+            gap: 1rem;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .editor-container {
+            height: 480px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--surface-border);
+            overflow: hidden;
+            background: #0a0e12;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.6);
+            transition: border 0.2s;
+        }
+
+        .editor-container:focus-within {
+            border-color: rgba(94, 179, 246, 0.4);
+        }
+
+        .editor-status {
+            display: flex;
+            gap: 1.8rem;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 0.6rem;
+            justify-content: flex-end;
+        }
+
+        /* Settings panel */
+        .settings-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.2rem 1.8rem;
+            align-items: center;
+            justify-content: flex-start;
+            margin: 1.2rem 0 1.8rem;
+        }
+
+        .setting-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem 1.6rem;
+            align-items: center;
+        }
+
+        .toggle-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            user-select: none;
+            font-size: 0.9rem;
+            color: #b6c5d1;
+        }
+
+        .toggle-item input {
+            appearance: none;
+            width: 36px;
+            height: 20px;
+            background: #2a333c;
+            border-radius: 20px;
+            position: relative;
+            outline: none;
+            transition: background 0.2s;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .toggle-item input:checked {
+            background: rgba(94, 179, 246, 0.7);
+        }
+
+        .toggle-item input::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 1px;
+            left: 2px;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+
+        .toggle-item input:checked::after {
+            transform: translateX(16px);
+        }
+
+        .select-runtime {
+            background: #1d2830;
+            border: 1px solid #2c3a44;
+            color: var(--text);
+            border-radius: 30px;
+            padding: 0.45rem 1rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 0.6rem;
+        }
+
+        .btn {
+            background: rgba(20, 28, 34, 0.7);
+            border: 1px solid var(--surface-border);
+            color: var(--text);
+            padding: 0.7rem 1.4rem;
+            border-radius: 30px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            backdrop-filter: blur(6px);
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .btn:hover {
+            background: rgba(40, 52, 62, 0.8);
+            border-color: rgba(255,255,255,0.25);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(0,0,0,0.4);
+        }
+
+        .btn-primary {
+            background: rgba(94, 179, 246, 0.12);
+            border-color: rgba(94, 179, 246, 0.5);
+            color: #c9e6ff;
+            font-weight: 600;
+            padding: 0.85rem 2.4rem;
+            font-size: 1rem;
+        }
+
+        .btn-primary:hover {
+            background: rgba(94, 179, 246, 0.25);
+            box-shadow: 0 0 22px var(--accent-glow);
+        }
+
+        .obfuscate-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1rem;
+            margin: 1.2rem 0 1rem;
+            justify-content: center;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            justify-content: center;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: rgba(16, 24, 30, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 0.9rem 1.6rem;
+            border-radius: 40px;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            z-index: 999;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: 0.3s;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 2.5rem;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            letter-spacing: 0.8px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            padding-top: 1.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .privacy-note {
+            color: #6a7f8f;
+            font-size: 0.75rem;
+        }
+
+        @media (max-width: 900px) {
+            .editor-grid {
+                grid-template-columns: 1fr;
+            }
+            .editor-container {
+                height: 360px;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .nav {
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+        }
+        /* style.css content ends */
+    </style>
+</head>
+<body>
+<div class="app-wrapper">
+    <!-- Header -->
+    <header class="header">
+        <div class="brand">
+            <div class="brand-logo">A</div>
+            <h1>APEX HUB <span>Lua/Luau Obfuscator</span></h1>
+            <span class="badge">LUA/LUAU</span>
+        </div>
+        <nav class="nav">
+            <span class="active">Obfuscator</span>
+            <span>Settings</span>
+            <span>Documentation</span>
+            <span>About</span>
+        </nav>
+    </header>
+
+    <!-- Main editor grid -->
+    <div class="editor-grid">
+        <div class="editor-col glass-panel" style="padding: 1.2rem;">
+            <div class="editor-header">
+                INPUT
+                <div class="counter" id="inputCounter">Lines: 0 | Characters: 0</div>
+            </div>
+            <div id="inputEditor" class="editor-container"></div>
+            <div class="editor-status">
+                <span>Lua / Luau source</span>
+                <span id="inputOriginalInfo"></span>
+            </div>
+        </div>
+        <div class="editor-col glass-panel" style="padding: 1.2rem;">
+            <div class="editor-header">
+                OBFUSCATED OUTPUT
+                <div class="counter" id="outputCounter">Lines: 0 | Characters: 0</div>
+            </div>
+            <div id="outputEditor" class="editor-container"></div>
+            <div class="editor-status">
+                <span id="outputSizeInfo">Size: 0 KB</span>
+                <span id="outputOriginalInfo"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings panel -->
+    <div class="glass-panel" style="padding: 1.2rem 1.5rem;">
+        <div style="display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; justify-content: space-between;">
+            <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                <span style="color:var(--text-dim); font-weight:500;">Presets</span>
+                <div class="preset-buttons">
+                    <button class="btn" data-preset="safe">SAFE</button>
+                    <button class="btn" data-preset="balanced">BALANCED</button>
+                    <button class="btn" data-preset="extreme">EXTREME</button>
+                </div>
+                <span style="color:var(--text-dim); margin-left:0.8rem;">Target</span>
+                <select id="runtimeSelect" class="select-runtime">
+                    <option value="roblox" selected>Roblox Luau</option>
+                    <option value="luau">Generic Luau</option>
+                    <option value="lua">Generic Lua</option>
+                </select>
+            </div>
+            <button class="btn" id="resetSettingsBtn">Reset Settings</button>
+        </div>
+        <div class="settings-panel" style="margin-top: 1.2rem;">
+            <div class="setting-group">
+                <label class="toggle-item"><input type="checkbox" id="optRenameVars" checked> Rename Variables</label>
+                <label class="toggle-item"><input type="checkbox" id="optRenameFuncs" checked> Rename Functions</label>
+                <label class="toggle-item"><input type="checkbox" id="optStringProtect" checked> String Protection</label>
+                <label class="toggle-item"><input type="checkbox" id="optConstTransform" checked> Constant Transform</label>
+                <label class="toggle-item"><input type="checkbox" id="optControlFlow" checked> Control Flow</label>
+                <label class="toggle-item"><input type="checkbox" id="optDeadCode" checked> Dead Code</label>
+                <label class="toggle-item"><input type="checkbox" id="optMinify" checked> Minify</label>
+                <label class="toggle-item"><input type="checkbox" id="optPreserveGlobals" checked> Preserve Globals</label>
+                <label class="toggle-item"><input type="checkbox" id="optPreserveAPI" checked> Preserve API Names</label>
+            </div>
+        </div>
+        <div class="obfuscate-wrapper">
+            <button class="btn btn-primary" id="obfuscateBtn">⚡ OBFUSCATE</button>
+            <div class="action-buttons">
+                <button class="btn" id="copyBtn">Copy</button>
+                <button class="btn" id="downloadBtn">Download .lua</button>
+                <button class="btn" id="clearInputBtn">Clear Input</button>
+                <button class="btn" id="clearOutputBtn">Clear Output</button>
+                <button class="btn" id="formatInputBtn">Format Input</button>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 1rem;">
+            <span style="color:#6a7f8f; font-size:0.75rem;">Client-side processing • Your source code stays in your browser.</span>
+            <span style="color:#6a7f8f; font-size:0.75rem;">Extreme mode may increase script size and runtime overhead.</span>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <span>APEX HUB • Lua/Luau Developer Tools</span>
+        <span>v1.0.0</span>
+        <span class="privacy-note">No server upload, all obfuscation local</span>
+    </footer>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- Monaco Editor and dependencies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+<script>
+    // loader for monaco
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+</script>
+<script src="obfuscator.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

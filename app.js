@@ -1,7 +1,7 @@
-// APEX HUB Obfuscator - Application Logic
+// APEX HUB Obfuscator - Application Logic (FIXED)
 require(['vs/editor/editor.main'], function() {
     const inputEditor = monaco.editor.create(document.getElementById('inputEditor'), {
-        value: `local Players = game:GetService("Players")\nlocal player = Players.LocalPlayer\nlocal character = player.Character\n\nlocal function greet(name)\n    print("Hello " .. name)\nend\n\ngreet(player.Name)`,
+        value: `local Players = game:GetService("Players")\nlocal player = Players.LocalPlayer\nlocal character = player.Character\n\nif character then\n    print(character.Name)\nend`,
         language: 'lua',
         theme: 'vs-dark',
         automaticLayout: true,
@@ -140,7 +140,7 @@ require(['vs/editor/editor.main'], function() {
         });
     });
 
-    // Obfuscate button
+    // OBFUSCATE BUTTON - FIXED
     document.getElementById('obfuscateBtn').addEventListener('click', function() {
         const source = inputEditor.getValue();
         const btn = this;
@@ -174,11 +174,11 @@ require(['vs/editor/editor.main'], function() {
                 const statsPanel = document.getElementById('statsPanel');
                 statsPanel.classList.add('active');
                 statsPanel.innerHTML = `
-                    <span>Identifiers: ${result.stats.identifiersRenamed}</span>
-                    <span>Strings: ${result.stats.stringsProtected}</span>
-                    <span>Constants: ${result.stats.constantsTransformed}</span>
+                    <span>Identifiers Renamed: ${result.stats.identifiersRenamed}</span>
+                    <span>Strings Protected: ${result.stats.stringsProtected}</span>
+                    <span>Constants Transformed: ${result.stats.constantsTransformed}</span>
                     <span>Junk Blocks: ${result.stats.junkBlocksAdded}</span>
-                    <span>Passes: ${result.stats.passesApplied}</span>
+                    <span>Passes Applied: ${result.stats.passesApplied}</span>
                 `;
                 
                 showToast('✓ Obfuscation completed');

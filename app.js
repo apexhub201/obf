@@ -1,8 +1,8 @@
-// APEX HUB app logic
+// APEX HUB Obfuscator - Application Logic
 require(['vs/editor/editor.main'], function() {
-    // Monaco setup
+    // Monaco Editor instances
     const inputEditor = monaco.editor.create(document.getElementById('inputEditor'), {
-        value: '-- paste your Lua/Luau code here\nlocal player = game.Players.LocalPlayer\nlocal character = player.Character\nprint("Hello")',
+        value: `-- Example Lua/Luau code\nlocal Players = game:GetService("Players")\nlocal player = Players.LocalPlayer\nlocal character = player.Character\n\nlocal function greet(name)\n    print("Hello " .. name)\nend\n\ngreet(player.Name)`,
         language: 'lua',
         theme: 'vs-dark',
         automaticLayout: true,
@@ -26,6 +26,7 @@ require(['vs/editor/editor.main'], function() {
         wordWrap: 'on'
     });
 
+    // Update counters
     function updateCounters() {
         const inputCode = inputEditor.getValue();
         const inputLines = inputCode.split('\n').length;
@@ -54,7 +55,8 @@ require(['vs/editor/editor.main'], function() {
         minify: true,
         preserveGlobals: true,
         preserveAPI: true,
-        targetRuntime: 'roblox'
+        targetRuntime: 'roblox',
+        seed: Math.floor(Math.random() * 999999)
     };
 
     function syncUIFromSettings() {
@@ -81,6 +83,7 @@ require(['vs/editor/editor.main'], function() {
         settings.preserveGlobals = document.getElementById('optPreserveGlobals').checked;
         settings.preserveAPI = document.getElementById('optPreserveAPI').checked;
         settings.targetRuntime = document.getElementById('runtimeSelect').value;
+        settings.seed = Math.floor(Math.random() * 999999);
     }
 
     syncUIFromSettings();
@@ -95,33 +98,58 @@ require(['vs/editor/editor.main'], function() {
         btn.addEventListener('click', () => {
             const preset = btn.getAttribute('data-preset');
             if (preset === 'safe') {
-                settings.renameVariables = true; settings.renameFunctions = true;
-                settings.stringProtection = false; settings.constantTransform = false;
-                settings.controlFlow = false; settings.deadCode = false; settings.minify = true;
+                settings.renameVariables = true;
+                settings.renameFunctions = true;
+                settings.stringProtection = false;
+                settings.constantTransform = false;
+                settings.controlFlow = false;
+                settings.deadCode = false;
+                settings.minify = true;
             } else if (preset === 'balanced') {
-                settings.renameVariables = true; settings.renameFunctions = true;
-                settings.stringProtection = true; settings.constantTransform = true;
-                settings.controlFlow = false; settings.deadCode = false; settings.minify = true;
-            } else if (preset === 'extreme') {
-                settings.renameVariables = true; settings.renameFunctions = true;
-                settings.stringProtection = true; settings.constantTransform = true;
-                settings.controlFlow = true; settings.deadCode = true; settings.minify = true;
+                settings.renameVariables = true;
+                settings.renameFunctions = true;
+                settings.stringProtection = true;
+                settings.constantTransform = true;
+                settings.controlFlow = false;
+                settings.deadCode = false;
+                settings.minify = true;
+            } else if (preset === 'strong') {
+                settings.renameVariables = true;
+                settings.renameFunctions = true;
+                settings.stringProtection = true;
+                settings.constantTransform = true;
+                settings.controlFlow = true;
+                settings.deadCode = true;
+                settings.minify = true;
+            } else if (preset === 'max') {
+                settings.renameVariables = true;
+                settings.renameFunctions = true;
+                settings.stringProtection = true;
+                settings.constantTransform = true;
+                settings.controlFlow = true;
+                settings.deadCode = true;
+                settings.minify = true;
             }
             syncUIFromSettings();
         });
     });
 
     document.getElementById('resetSettingsBtn').addEventListener('click', () => {
-        settings.renameVariables = true; settings.renameFunctions = true;
-        settings.stringProtection = true; settings.constantTransform = true;
-        settings.controlFlow = true; settings.deadCode = true; settings.minify = true;
-        settings.preserveGlobals = true; settings.preserveAPI = true;
+        settings.renameVariables = true;
+        settings.renameFunctions = true;
+        settings.stringProtection = true;
+        settings.constantTransform = true;
+        settings.controlFlow = true;
+        settings.deadCode = true;
+        settings.minify = true;
+        settings.preserveGlobals = true;
+        settings.preserveAPI = true;
         settings.targetRuntime = 'roblox';
         syncUIFromSettings();
     });
 
     // Toast
-    function showToast(message, type='success') {
+    function showToast(message, type = 'success') {
         const toast = document.getElementById('toast');
         toast.textContent = message;
         toast.style.borderColor = type === 'error' ? 'rgba(245,139,139,0.7)' : 'rgba(107,213,160,0.6)';
@@ -139,15 +167,12 @@ require(['vs/editor/editor.main'], function() {
         }
 
         readSettingsFromUI();
-        const obfuscator = new LuaObfuscator({
-            ...settings,
-            seed: Math.floor(Math.random() * 999999)
-        });
-
-        // loading state
+        const obfuscator = new LuaObfuscator(settings);
+        
         const btn = document.getElementById('obfuscateBtn');
         btn.style.opacity = '0.6';
         btn.textContent = '⚡ PROCESSING...';
+        
         setTimeout(() => {
             try {
                 const result = obfuscator.obfuscate(source);
@@ -169,22 +194,46 @@ require(['vs/editor/editor.main'], function() {
     // Copy
     document.getElementById('copyBtn').addEventListener('click', () => {
         const code = outputEditor.getValue();
-        if (!code) { showToast('No output to copy', 'error'); return; }
+        if (!code) {
+            showToast('No output to copy', 'error');
+            return;
+        }
         navigator.clipboard.writeText(code).then(() => showToast('Copied to clipboard'));
     });
 
     // Download
     document.getElementById('downloadBtn').addEventListener('click', () => {
         const code = outputEditor.getValue();
-        if (!code) { showToast('No output to download', 'error'); return; }
+        if (!code) {
+            showToast('No output to download', 'error');
+            return;
+        }
         const blob = new Blob([code], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'obfuscated.lua';
-        a.click(); URL.revokeObjectURL(url);
+        a.href = url;
+        a.download = 'obfuscated.lua';
+        a.click();
+        URL.revokeObjectURL(url);
     });
 
-    // Clear input / output
+    // Validate
+    document.getElementById('validateBtn').addEventListener('click', () => {
+        const code = outputEditor.getValue();
+        if (!code) {
+            showToast('No output to validate', 'error');
+            return;
+        }
+        try {
+            const obfuscator = new LuaObfuscator(settings);
+            obfuscator.validateLuaSyntax(code);
+            showToast('✓ Syntax is valid');
+        } catch (e) {
+            showToast('Validation error: ' + e.message, 'error');
+        }
+    });
+
+    // Clear input/output
     document.getElementById('clearInputBtn').addEventListener('click', () => {
         inputEditor.setValue('');
     });
@@ -193,11 +242,10 @@ require(['vs/editor/editor.main'], function() {
         updateCounters();
     });
 
-    // Format input (basic)
+    // Format input
     document.getElementById('formatInputBtn').addEventListener('click', () => {
         try {
             const code = inputEditor.getValue();
-            // minimal indentation formatting (add newline before end)
             const formatted = code.replace(/\n\s*\n/g, '\n');
             inputEditor.setValue(formatted);
             showToast('Input formatted (basic)');
@@ -206,6 +254,5 @@ require(['vs/editor/editor.main'], function() {
         }
     });
 
-    // initial update
     updateCounters();
 });

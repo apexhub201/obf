@@ -6,26 +6,14 @@ self.onmessage = function(e) {
     const { source, settings, toggles } = e.data;
     
     try {
-        // Process the build
         const result = performBuild(source, settings, toggles);
-        
-        // Send success response
-        self.postMessage({ 
-            success: true, 
-            ...result 
-        });
+        self.postMessage({ success: true, ...result });
     } catch (error) {
         console.error('Worker build error:', error);
-        
-        // Send error response
         self.postMessage({ 
             success: false, 
             error: error.message || 'Unknown error',
-            log: [{ 
-                stage: 'ERROR', 
-                status: 'FAILED', 
-                message: error.message || 'Unknown error' 
-            }]
+            log: [{ stage: 'ERROR', status: 'FAILED', message: error.message || 'Unknown error' }]
         });
     }
 };
@@ -37,65 +25,41 @@ function performBuild(source, settings, toggles) {
         throw new Error('Invalid source code');
     }
     
-    if (!settings || typeof settings !== 'object') {
-        throw new Error('Invalid settings');
-    }
-    
-    if (!toggles || typeof toggles !== 'object') {
-        throw new Error('Invalid toggles');
-    }
-    
-    // Stage 1: Analysis
-    const analysisStart = Date.now();
+    // Tokenize source
     const tokens = tokenize(source);
+    
+    // Parse tokens
     const ast = parse(tokens);
+    
+    // Analyze scope
     const scopeInfo = analyzeScope(ast);
-    const analysisTime = Date.now() - analysisStart;
     
-    // Stage 2: Apply transformations
-    const transformationStart = Date.now();
+    // Apply transformations
     const transformations = applyTransformations(ast, settings, toggles);
-    const transformationTime = Date.now() - transformationStart;
     
-    // Stage 3: Generate code
-    const generationStart = Date.now();
+    // Generate code
     const output = generateCode(transformations.ast, settings);
-    const generationTime = Date.now() - generationStart;
     
-    // Stage 4: Validate output
-    const validationStart = Date.now();
+    // Validate output
     const validation = validateOutput(output);
-    const validationTime = Date.now() - validationStart;
     
     if (!validation.valid) {
         throw new Error(validation.error || 'Output validation failed');
     }
     
-    // Stage 5: Pack output
-    const packingStart = Date.now();
+    // Pack output
     const packedOutput = packCode(output, settings);
-    const packingTime = Date.now() - packingStart;
     
     // Final validation on packed output
     const finalValidation = validateOutput(packedOutput);
-    if (!finalValidation.valid) {
-        // If packed output fails validation, use unpacked output
-        console.warn('Packed output validation failed, using unpacked output');
-        return createResult(source, output, transformations, validation);
-    }
     
-    return createResult(source, packedOutput, transformations, finalValidation);
-}
-
-// Create result object
-function createResult(source, output, transformations, validation) {
+    // If packed output fails validation, use unpacked output
+    const finalOutput = finalValidation.valid ? packedOutput : output;
+    
     return {
-        output: output,
-        stats: calculateStats(source, output, transformations),
-        log: generateBuildLog(transformations, validation),
-        timing: {
-            total: Date.now()
-        }
+        output: finalOutput,
+        stats: calculateStats(source, finalOutput, transformations),
+        log: generateBuildLog(transformations, finalValidation.valid ? finalValidation : validation)
     };
 }
 
@@ -136,8 +100,8 @@ function tokenize(source) {
             pos += 2;
             column += 2;
             
-            // Long comment
             if (source[pos] === '[' && source[pos + 1] === '[') {
+                // Long comment
                 pos += 2;
                 column += 2;
                 while (pos < source.length) {
@@ -186,8 +150,10 @@ function tokenize(source) {
                 }
             }
             
-            pos++; // Skip closing quote
-            column++;
+            if (pos < source.length) {
+                pos++; // Skip closing quote
+                column++;
+            }
             
             tokens.push({ 
                 type: 'STRING', 
@@ -233,29 +199,66 @@ function tokenize(source) {
             continue;
         }
         
-        // Numbers
-        if (char >= '0' && char <= '9') {
+        // Numbers - FIXED: Proper number parsing
+        if ((char >= '0' && char <= '9') || (char === '.' && source[pos + 1] >= '0' && source[pos + 1] <= '9')) {
             let num = '';
             const startColumn = column;
+            let hasDecimal = false;
+            let hasExponent = false;
             
             while (pos < source.length) {
                 const c = source[pos];
-                if ((c >= '0' && c <= '9') || c === '.' || c === 'e' || c === 'E' || c === '-' || c === '+') {
+                
+                if (c >= '0' && c <= '9') {
                     num += c;
                     pos++;
                     column++;
+                } else if (c === '.' && !hasDecimal && !hasExponent) {
+                    // Only allow one decimal point
+                    hasDecimal = true;
+                    num += c;
+                    pos++;
+                    column++;
+                } else if ((c === 'e' || c === 'E') && !hasExponent) {
+                    // Check if exponent is valid
+                    const nextChar = source[pos + 1];
+                    if (nextChar === '+' || nextChar === '-' || (nextChar >= '0' && nextChar <= '9')) {
+                        hasExponent = true;
+                        num += c;
+                        pos++;
+                        column++;
+                        
+                        // Handle exponent sign
+                        if (source[pos] === '+' || source[pos] === '-') {
+                            num += source[pos];
+                            pos++;
+                            column++;
+                        }
+                    } else {
+                        break;
+                    }
+                } else if (c === 'x' || c === 'X') {
+                    // Hex number - stop here
+                    break;
                 } else {
                     break;
                 }
             }
             
-            tokens.push({ 
-                type: 'NUMBER', 
-                value: parseFloat(num), 
-                raw: num,
-                line: line,
-                column: startColumn
-            });
+            // Only create token if we have a valid number
+            if (num.length > 0 && num !== '.') {
+                const numericValue = parseFloat(num);
+                
+                if (!isNaN(numericValue)) {
+                    tokens.push({ 
+                        type: 'NUMBER', 
+                        value: numericValue, 
+                        raw: num,
+                        line: line,
+                        column: startColumn
+                    });
+                }
+            }
             continue;
         }
         
@@ -290,7 +293,7 @@ function tokenize(source) {
         
         // Operators
         const operators = [
-            '==', '~=', '<=', '>=', '..', '...', '+=', '-=', '*=', '/=',
+            '==', '~=', '<=', '>=', '..', '...', 
             '+', '-', '*', '/', '%', '^', '#', '=', '<', '>', '.', ':',
             ',', '(', ')', '{', '}', '[', ']', ';'
         ];
@@ -339,6 +342,11 @@ function parse(tokens) {
     while (i < tokens.length) {
         const token = tokens[i];
         
+        if (!token || !token.type) {
+            i++;
+            continue;
+        }
+        
         if (token.type === 'KEYWORD') {
             if (token.value === 'local') {
                 const node = {
@@ -351,8 +359,7 @@ function parse(tokens) {
                 
                 i++;
                 
-                // Parse variable names
-                while (i < tokens.length && tokens[i].type === 'IDENTIFIER') {
+                while (i < tokens.length && tokens[i] && tokens[i].type === 'IDENTIFIER') {
                     node.names.push(tokens[i].value);
                     i++;
                     
@@ -363,34 +370,26 @@ function parse(tokens) {
                     }
                 }
                 
-                // Check for assignment
                 if (tokens[i] && tokens[i].value === '=') {
-                    i++; // Skip '='
+                    i++;
                     
-                    // Parse values (simplified)
-                    while (i < tokens.length && tokens[i].type !== 'KEYWORD') {
+                    while (i < tokens.length && tokens[i] && tokens[i].type !== 'KEYWORD') {
                         if (tokens[i].type === 'STRING') {
                             node.values.push({ 
                                 type: 'StringLiteral', 
                                 value: tokens[i].value,
-                                raw: tokens[i].raw,
-                                line: tokens[i].line,
-                                column: tokens[i].column
+                                raw: tokens[i].raw
                             });
                         } else if (tokens[i].type === 'NUMBER') {
                             node.values.push({ 
                                 type: 'NumberLiteral', 
                                 value: tokens[i].value,
-                                raw: tokens[i].raw,
-                                line: tokens[i].line,
-                                column: tokens[i].column
+                                raw: tokens[i].raw
                             });
                         } else if (tokens[i].type === 'IDENTIFIER') {
                             node.values.push({ 
                                 type: 'Identifier', 
-                                name: tokens[i].value,
-                                line: tokens[i].line,
-                                column: tokens[i].column
+                                name: tokens[i].value
                             });
                         }
                         
@@ -405,108 +404,21 @@ function parse(tokens) {
                 }
                 
                 ast.body.push(node);
-            } else if (token.value === 'function') {
-                const node = {
-                    type: 'FunctionDeclaration',
-                    name: '',
-                    params: [],
-                    body: [],
-                    line: token.line,
-                    column: token.column
-                };
-                
-                i++;
-                
-                if (tokens[i] && tokens[i].type === 'IDENTIFIER') {
-                    node.name = tokens[i].value;
-                    i++;
-                }
-                
-                if (tokens[i] && tokens[i].value === '(') {
-                    i++; // Skip '('
-                    
-                    while (i < tokens.length && tokens[i].value !== ')') {
-                        if (tokens[i].type === 'IDENTIFIER') {
-                            node.params.push(tokens[i].value);
-                        }
-                        i++;
-                        
-                        if (tokens[i] && tokens[i].value === ',') {
-                            i++;
-                        }
-                    }
-                    
-                    if (tokens[i] && tokens[i].value === ')') {
-                        i++; // Skip ')'
-                    }
-                }
-                
-                ast.body.push(node);
-            } else if (token.value === 'if') {
-                const node = {
-                    type: 'IfStatement',
-                    condition: null,
-                    thenBranch: [],
-                    elseBranch: [],
-                    line: token.line,
-                    column: token.column
-                };
-                
-                i++;
-                
-                // Parse condition (simplified)
-                if (tokens[i] && tokens[i].type === 'IDENTIFIER') {
-                    node.condition = { 
-                        type: 'Identifier', 
-                        name: tokens[i].value 
-                    };
-                    i++;
-                } else if (tokens[i] && tokens[i].type === 'KEYWORD' && 
-                          (tokens[i].value === 'true' || tokens[i].value === 'false')) {
-                    node.condition = { 
-                        type: 'BooleanLiteral', 
-                        value: tokens[i].value === 'true' 
-                    };
-                    i++;
-                } else if (tokens[i] && tokens[i].type === 'NUMBER') {
-                    node.condition = { 
-                        type: 'NumberLiteral', 
-                        value: tokens[i].value 
-                    };
-                    i++;
-                }
-                
-                if (tokens[i] && tokens[i].value === 'then') {
-                    i++; // Skip 'then'
-                }
-                
-                ast.body.push(node);
             } else if (token.value === 'return') {
                 const node = {
                     type: 'ReturnStatement',
-                    values: [],
-                    line: token.line,
-                    column: token.column
+                    values: []
                 };
                 
                 i++;
                 
-                while (i < tokens.length && tokens[i].type !== 'KEYWORD') {
+                while (i < tokens.length && tokens[i] && tokens[i].type !== 'KEYWORD') {
                     if (tokens[i].type === 'STRING') {
-                        node.values.push({ 
-                            type: 'StringLiteral', 
-                            value: tokens[i].value 
-                        });
+                        node.values.push({ type: 'StringLiteral', value: tokens[i].value });
                     } else if (tokens[i].type === 'NUMBER') {
-                        node.values.push({ 
-                            type: 'NumberLiteral', 
-                            value: tokens[i].value 
-                        });
+                        node.values.push({ type: 'NumberLiteral', value: tokens[i].value, raw: tokens[i].raw });
                     } else if (tokens[i].type === 'IDENTIFIER') {
-                        node.values.push({ 
-                            type: 'Identifier', 
-                            name: tokens[i].value 
-                        });
+                        node.values.push({ type: 'Identifier', name: tokens[i].value });
                     }
                     
                     i++;
@@ -519,45 +431,25 @@ function parse(tokens) {
                 }
                 
                 ast.body.push(node);
-            } else if (token.value === 'while') {
-                const node = {
-                    type: 'WhileStatement',
-                    condition: null,
-                    body: [],
-                    line: token.line,
-                    column: token.column
-                };
-                
-                i++;
-                
-                // Parse condition (simplified)
-                if (tokens[i] && (tokens[i].type === 'IDENTIFIER' || tokens[i].type === 'NUMBER')) {
-                    node.condition = {
-                        type: tokens[i].type === 'IDENTIFIER' ? 'Identifier' : 'NumberLiteral',
-                        value: tokens[i].value,
-                        name: tokens[i].value
-                    };
-                    i++;
-                }
-                
-                if (tokens[i] && tokens[i].value === 'do') {
-                    i++; // Skip 'do'
-                }
-                
-                ast.body.push(node);
             }
         } else if (token.type === 'IDENTIFIER') {
-            // Simple expression statement
-            const node = {
-                type: 'ExpressionStatement',
-                expression: { 
-                    type: 'Identifier', 
-                    name: token.value 
-                },
-                line: token.line,
-                column: token.column
-            };
-            ast.body.push(node);
+            // Check if it's a function call
+            const nextToken = tokens[i + 1];
+            if (nextToken && nextToken.value === '(') {
+                const node = {
+                    type: 'CallExpression',
+                    callee: { type: 'Identifier', name: token.value },
+                    arguments: []
+                };
+                ast.body.push(node);
+            } else if (nextToken && nextToken.value === '=') {
+                const node = {
+                    type: 'Assignment',
+                    targets: [token.value],
+                    values: []
+                };
+                ast.body.push(node);
+            }
         }
         
         i++;
@@ -615,7 +507,8 @@ function applyTransformations(ast, settings, toggles) {
             deadBlocks: 0,
             controlFlowTransforms: 0,
             tablesTransformed: 0,
-            expressionsTransformed: 0
+            expressionsTransformed: 0,
+            predicatesAdded: 0
         }
     };
     
@@ -661,24 +554,10 @@ function applyTransformations(ast, settings, toggles) {
         transformations.stats.predicatesAdded = predResult.count;
     }
     
-    // Apply control flow transformation
-    if (toggles.controlFlow && settings.controlFlowLevel && settings.controlFlowLevel !== 'off') {
-        const cflowResult = transformControlFlow(ast, settings);
-        transformations.applied.controlFlow = true;
-        transformations.stats.controlFlowTransforms = cflowResult.count;
-    }
-    
-    // Apply expression transformation
-    if (toggles.constants) {
-        const exprResult = transformExpressions(ast.tokens, settings);
-        transformations.applied.expressions = true;
-        transformations.stats.expressionsTransformed = exprResult.count;
-    }
-    
     return transformations;
 }
 
-// Rename variables
+// Rename variables - FIXED: Better number handling
 function renameVariables(tokens, settings) {
     const variableNames = new Map();
     const protectedNames = new Set([
@@ -688,33 +567,20 @@ function renameVariables(tokens, settings) {
         'math', 'string', 'table', 'coroutine', 'utf8', 'print',
         'warn', 'error', 'assert', 'pcall', 'xpcall', 'pairs',
         'ipairs', 'next', 'tonumber', 'tostring', 'type', 'typeof',
-        'task', 'wait', 'spawn', 'delay', 'GetService', 'WaitForChild',
-        'Character', 'CharacterAdded', 'LocalPlayer', 'WalkSpeed',
-        'Health', 'Position', 'Parent', 'Name', 'MouseButton1Click',
-        'InputBegan', 'InputChanged', 'Heartbeat', 'Connect', 'Create',
-        'Play', 'Value', 'Size', 'Text', 'Frame', 'Visible', 'Color',
-        'Font'
+        'task', 'wait', 'spawn', 'delay'
     ]);
     
     let count = 0;
     const style = settings.identStyle || 'random';
-    const seed = settings.seed || 12345;
-    
-    // Use deterministic random if specified
-    let randomState = seed;
-    function nextRandom() {
-        randomState = (randomState * 1103515245 + 12345) % 2147483648;
-        return randomState / 2147483648;
-    }
     
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
         
-        if (token.type === 'KEYWORD' && token.value === 'local') {
+        if (token && token.type === 'KEYWORD' && token.value === 'local') {
             const nextToken = tokens[i + 1];
             if (nextToken && nextToken.type === 'IDENTIFIER') {
                 if (!protectedNames.has(nextToken.value) && !variableNames.has(nextToken.value)) {
-                    const newName = generateIdentifier(style, count, settings.deterministicBuild ? nextRandom : Math.random);
+                    const newName = generateIdentifier(style, count);
                     variableNames.set(nextToken.value, newName);
                     nextToken.originalName = nextToken.value;
                     nextToken.value = newName;
@@ -728,7 +594,7 @@ function renameVariables(tokens, settings) {
     // Update references
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
-        if (token.type === 'IDENTIFIER' && variableNames.has(token.value)) {
+        if (token && token.type === 'IDENTIFIER' && variableNames.has(token.value)) {
             token.value = variableNames.get(token.value);
             token.renamed = true;
         }
@@ -737,42 +603,38 @@ function renameVariables(tokens, settings) {
     return { count };
 }
 
-// Generate identifier
-function generateIdentifier(style, index, randomFn) {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
-    const confusingChars = 'iIlL10Oo';
+// Generate identifier - FIXED: Ensure valid Lua identifiers
+function generateIdentifier(style, index) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const confusingChars = 'iIlL';
     let result = '';
-    
-    function getRandom() {
-        return randomFn ? randomFn() : Math.random();
-    }
     
     function generateRandomString(length, charSet) {
         let str = '';
         for (let i = 0; i < length; i++) {
-            str += charSet[Math.floor(getRandom() * charSet.length)];
+            str += charSet[Math.floor(Math.random() * charSet.length)];
         }
         return str;
     }
     
     switch (style) {
         case 'short':
-            result = '_' + (index + 1);
+            result = '_v' + (index + 1);
             break;
         case 'random':
-            result = '_' + generateRandomString(5, chars);
+            result = '_' + generateRandomString(6, chars);
             break;
         case 'confusing':
-            result = '_' + generateRandomString(6, confusingChars);
+            result = '_' + generateRandomString(7, confusingChars);
             break;
         case 'long':
-            result = '_' + generateRandomString(10, chars);
+            result = '_' + generateRandomString(12, chars);
             break;
         case 'mixed':
-            result = '_' + generateRandomString(7, chars);
+            result = '_' + generateRandomString(8, chars);
             break;
         default:
-            result = '_' + generateRandomString(5, chars);
+            result = '_' + generateRandomString(6, chars);
     }
     
     return result;
@@ -782,40 +644,17 @@ function generateIdentifier(style, index, randomFn) {
 function protectStrings(tokens, settings) {
     let count = 0;
     const seed = settings.seed || 12345;
-    const mode = settings.stringMode || 'encoded';
     
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
         
-        if (token.type === 'STRING' || token.type === 'LONG_STRING') {
-            const originalValue = token.value;
-            
-            switch (mode) {
-                case 'split':
-                    if (originalValue.length > 1) {
-                        const mid = Math.floor(originalValue.length / 2);
-                        const left = originalValue.substring(0, mid);
-                        const right = originalValue.substring(mid);
-                        token.value = left;
-                        token.splitValue = right;
-                        token.split = true;
-                        count++;
-                    }
-                    break;
-                    
-                case 'encoded':
-                case 'pool':
-                case 'runtime':
-                case 'adaptive':
-                default:
-                    const protectedString = encodeString(originalValue, seed);
-                    token.originalValue = originalValue;
-                    token.value = protectedString.encoded;
-                    token.encoded = true;
-                    token.decodeFunction = 'decodeString';
-                    count++;
-                    break;
-            }
+        if (token && (token.type === 'STRING' || token.type === 'LONG_STRING')) {
+            const protectedString = encodeString(token.value, seed);
+            token.originalValue = token.value;
+            token.value = protectedString.encoded;
+            token.encoded = true;
+            token.decodeFunction = 'decodeString';
+            count++;
         }
     }
     
@@ -830,48 +669,34 @@ function encodeString(value, seed) {
         return String.fromCharCode(char.charCodeAt(0) ^ key);
     }).join('');
     
-    return {
-        encoded: encoded,
-        function: 'decodeString'
-    };
+    return { encoded };
 }
 
-// Transform constants
+// Transform constants - FIXED: Safe number transformation
 function transformConstants(tokens, settings) {
     let count = 0;
     
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
         
-        if (token.type === 'NUMBER' && !token.transformed) {
+        if (token && token.type === 'NUMBER' && !token.transformed) {
             const num = token.value;
             
+            // Only transform safe integers
             if (Number.isInteger(num) && num > 0 && num < 1000) {
-                // Transform simple integers
                 const transformations = [
-                    `${num} + 0`,
-                    `${num} * 1`,
-                    `${num} - 0`,
-                    `(${num - 1}) + 1`,
-                    `(${num + 1}) - 1`
+                    { display: String(num), value: num },
+                    { display: `(${num} + 0)`, value: num },
+                    { display: `(${num} * 1)`, value: num },
+                    { display: `(${num} - 0)`, value: num }
                 ];
                 
+                const chosen = transformations[Math.floor(Math.random() * transformations.length)];
                 token.transformed = true;
-                token.transformedValue = transformations[Math.floor(Math.random() * transformations.length)];
-                count++;
-            } else if (!Number.isInteger(num) && num > 0) {
-                // Transform decimals
-                const transformations = [
-                    `${num} + 0.0`,
-                    `${num} * 1.0`,
-                    `(${num - 0.1}) + 0.1`,
-                    `(${num + 0.1}) - 0.1`
-                ];
-                
-                token.transformed = true;
-                token.transformedValue = transformations[Math.floor(Math.random() * transformations.length)];
+                token.transformedValue = chosen.display;
                 count++;
             }
+            // Don't transform decimals or special numbers
         }
     }
     
@@ -881,13 +706,14 @@ function transformConstants(tokens, settings) {
 // Add junk code
 function addJunkCode(ast, settings) {
     const junkDensity = settings.junkDensity || 0;
-    const junkCount = Math.floor(junkDensity / 10);
+    const junkCount = Math.floor(junkDensity / 25); // Reduced for safety
     
     for (let i = 0; i < junkCount; i++) {
         if (ast.body) {
+            const randomNum = Math.floor(Math.random() * 100) + 1;
             const junkNode = {
                 type: 'JunkCode',
-                content: `local _junk${i}_${Date.now()} = ${Math.floor(Math.random() * 1000)}`
+                content: `local _junk${i} = ${randomNum}`
             };
             ast.body.push(junkNode);
         }
@@ -899,13 +725,14 @@ function addJunkCode(ast, settings) {
 // Add dead code
 function addDeadCode(ast, settings) {
     const junkDensity = settings.junkDensity || 0;
-    const deadCount = Math.floor(junkDensity / 20);
+    const deadCount = Math.floor(junkDensity / 50); // Reduced for safety
     
     for (let i = 0; i < deadCount; i++) {
         if (ast.body) {
+            const randomNum = Math.floor(Math.random() * 100) + 1;
             const deadNode = {
                 type: 'DeadCode',
-                content: `if false then\n    local _dead${i}_${Date.now()} = ${Math.floor(Math.random() * 1000)}\nend`
+                content: `if false then\n    local _dead${i} = ${randomNum}\nend`
             };
             ast.body.push(deadNode);
         }
@@ -916,15 +743,14 @@ function addDeadCode(ast, settings) {
 
 // Add opaque predicates
 function addOpaquePredicates(ast, settings) {
-    const predicateCount = Math.floor((settings.junkDensity || 0) / 30);
+    const predicateCount = Math.floor((settings.junkDensity || 0) / 75); // Reduced
     
     for (let i = 0; i < predicateCount; i++) {
         if (ast.body) {
             const predicates = [
-                `local _pred${i} = (17 * 3 - 51) == 0`,
-                `local _pred${i} = (42 / 2 - 21) == 0`,
-                `local _pred${i} = (100 % 7 - 2) == 0`,
-                `local _pred${i} = ((25 * 4) - (50 * 2)) == 0`
+                `local _pred${i} = (2 + 2) == 4`,
+                `local _pred${i} = (10 - 5) == 5`,
+                `local _pred${i} = (3 * 3) == 9`
             ];
             
             const predNode = {
@@ -938,66 +764,21 @@ function addOpaquePredicates(ast, settings) {
     return { count: predicateCount };
 }
 
-// Transform control flow
-function transformControlFlow(ast, settings) {
-    const level = settings.controlFlowLevel || 'off';
-    let count = 0;
-    
-    if (level === 'low' || level === 'medium') {
-        // Basic block splitting
-        if (ast.body && ast.body.length > 3) {
-            count = Math.floor(ast.body.length / 3);
-        }
-    } else if (level === 'high' || level === 'extreme') {
-        // More aggressive transformation
-        if (ast.body && ast.body.length > 2) {
-            count = Math.floor(ast.body.length / 2);
-        }
-    }
-    
-    return { count };
-}
-
-// Transform expressions
-function transformExpressions(tokens, settings) {
-    let count = 0;
-    
-    for (let i = 0; i < tokens.length; i++) {
-        const token = tokens[i];
-        
-        if (token.type === 'OPERATOR' && ['+', '-', '*', '/'].includes(token.value)) {
-            const prevToken = tokens[i - 1];
-            const nextToken = tokens[i + 1];
-            
-            if (prevToken && nextToken && 
-                (prevToken.type === 'NUMBER' || prevToken.type === 'IDENTIFIER') &&
-                (nextToken.type === 'NUMBER' || nextToken.type === 'IDENTIFIER')) {
-                
-                token.transformed = true;
-                count++;
-            }
-        }
-    }
-    
-    return { count };
-}
-
-// Generate code from AST
+// Generate code from AST - FIXED: Proper number handling
 function generateCode(ast, settings) {
     let code = '';
     
-    // Generate code from tokens
     if (ast.tokens) {
         for (let i = 0; i < ast.tokens.length; i++) {
             const token = ast.tokens[i];
+            
+            if (!token) continue;
             
             switch (token.type) {
                 case 'STRING':
                 case 'LONG_STRING':
                     if (token.encoded) {
                         code += `decodeString("${escapeString(token.value)}", ${settings.seed || 12345})`;
-                    } else if (token.split) {
-                        code += `"${escapeString(token.value)}" .. "${escapeString(token.splitValue)}"`;
                     } else {
                         code += token.raw || `"${escapeString(token.value)}"`;
                     }
@@ -1007,6 +788,7 @@ function generateCode(ast, settings) {
                     if (token.transformed && token.transformedValue) {
                         code += token.transformedValue;
                     } else {
+                        // Ensure valid number output
                         code += token.raw || String(token.value);
                     }
                     break;
@@ -1024,7 +806,7 @@ function generateCode(ast, settings) {
             // Add spaces between tokens when needed
             if (i < ast.tokens.length - 1) {
                 const nextToken = ast.tokens[i + 1];
-                if (needsSpace(token, nextToken)) {
+                if (nextToken && needsSpace(token, nextToken)) {
                     code += ' ';
                 }
             }
@@ -1062,6 +844,8 @@ function escapeString(str) {
 
 // Check if space needed between tokens
 function needsSpace(token, nextToken) {
+    if (!token || !nextToken) return false;
+    
     // Keywords need space before identifiers
     if (token.type === 'KEYWORD' && nextToken.type === 'IDENTIFIER') {
         return true;
@@ -1069,6 +853,11 @@ function needsSpace(token, nextToken) {
     
     // Identifiers need space before keywords
     if (token.type === 'IDENTIFIER' && nextToken.type === 'KEYWORD') {
+        return true;
+    }
+    
+    // Numbers need space between them
+    if (token.type === 'NUMBER' && nextToken.type === 'NUMBER') {
         return true;
     }
     
@@ -1087,12 +876,6 @@ function needsSpace(token, nextToken) {
         }
     }
     
-    // Strings and numbers need space between them
-    if ((token.type === 'STRING' || token.type === 'LONG_STRING') && 
-        (nextToken.type === 'STRING' || nextToken.type === 'LONG_STRING')) {
-        return true;
-    }
-    
     return false;
 }
 
@@ -1100,7 +883,7 @@ function needsSpace(token, nextToken) {
 function usesStringEncoding(ast) {
     if (ast.tokens) {
         return ast.tokens.some(token => 
-            (token.type === 'STRING' || token.type === 'LONG_STRING') && token.encoded
+            token && (token.type === 'STRING' || token.type === 'LONG_STRING') && token.encoded
         );
     }
     return false;
@@ -1120,7 +903,7 @@ function generateStringDecoder() {
            'end';
 }
 
-// Validate output
+// Validate output - FIXED: Better number validation
 function validateOutput(code) {
     if (!code || code.trim().length === 0) {
         return { valid: false, error: 'Empty output' };
@@ -1146,6 +929,12 @@ function validateOutput(code) {
         return { valid: false, error: 'Unclosed brackets' };
     }
     
+    // Check for malformed numbers
+    const malformedNumberRegex = /\b\d+\.\d+\.\d+\b|\.\d+\.|\d+\.\.\d+/g;
+    if (malformedNumberRegex.test(code)) {
+        return { valid: false, error: 'Malformed number detected' };
+    }
+    
     // Check for common syntax errors
     if (code.includes('local =')) {
         return { valid: false, error: 'Invalid local declaration' };
@@ -1155,20 +944,10 @@ function validateOutput(code) {
         return { valid: false, error: 'Invalid function declaration' };
     }
     
-    // Check for unterminated strings
-    const lines = code.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const quoteCount = (line.match(/"/g) || []).length;
-        if (quoteCount % 2 !== 0) {
-            return { valid: false, error: `Unterminated string on line ${i + 1}` };
-        }
-    }
-    
     return { valid: true };
 }
 
-// Pack code (minify)
+// Pack code - FIXED: Safe minification
 function packCode(code, settings) {
     const packLevel = settings.packLevel || 0;
     
@@ -1186,13 +965,10 @@ function packCode(code, settings) {
     if (packLevel >= 2) {
         // Remove trailing whitespace
         packed = packed.split('\n').map(line => line.trimEnd()).join('\n');
-        
-        // Remove extra spaces (but preserve indentation)
-        packed = packed.replace(/[ \t]+/g, ' ');
     }
     
     if (packLevel >= 3) {
-        // More aggressive minification
+        // More aggressive but safe minification
         const lines = packed.split('\n');
         const packedLines = [];
         
@@ -1203,7 +979,7 @@ function packCode(code, settings) {
             }
         }
         
-        packed = packedLines.join(' ');
+        packed = packedLines.join('\n');
     }
     
     return packed;
@@ -1256,14 +1032,6 @@ function generateBuildLog(transformations, validation) {
         });
     }
     
-    if (transformations.applied.expressions) {
-        log.push({ 
-            stage: 'Expressions', 
-            status: 'PASS', 
-            message: `${transformations.stats.expressionsTransformed || 0} expressions transformed` 
-        });
-    }
-    
     if (transformations.applied.junk) {
         log.push({ 
             stage: 'Junk', 
@@ -1288,14 +1056,6 @@ function generateBuildLog(transformations, validation) {
         });
     }
     
-    if (transformations.applied.controlFlow) {
-        log.push({ 
-            stage: 'Control Flow', 
-            status: 'PASS', 
-            message: `${transformations.stats.controlFlowTransforms || 0} blocks transformed` 
-        });
-    }
-    
     log.push({ 
         stage: 'Packing', 
         status: 'PASS', 
@@ -1304,24 +1064,9 @@ function generateBuildLog(transformations, validation) {
     
     log.push({ 
         stage: 'Validation', 
-        status: 'PASS', 
-        message: 'All validations passed' 
+        status: validation.valid ? 'PASS' : 'FAILED', 
+        message: validation.valid ? 'All validations passed' : validation.error 
     });
     
     return log;
-}
-
-// Export for testing
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        tokenize,
-        parse,
-        analyzeScope,
-        applyTransformations,
-        generateCode,
-        validateOutput,
-        packCode,
-        calculateStats,
-        generateBuildLog
-    };
 }

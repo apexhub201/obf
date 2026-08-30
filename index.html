@@ -3,12 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APEX HUB • Lua/Luau Obfuscator</title>
+    <title>APEX HUB • Lua Obfuscator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.min.css">
-    <link rel="stylesheet" href="style.css">
+    <style>
+        :root {
+            --bg: #070b0e;
+            --surface: rgba(18, 25, 32, 0.65);
+            --surface-border: rgba(255, 255, 255, 0.08);
+            --text: #e5edf2;
+            --text-dim: #92a3b3;
+            --accent: #5eb3f6;
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 30% 10%, #1a2a35 0%, #0b1013 70%, #05080a 100%);
+            color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem 1.2rem;
+        }
+
+        .app-wrapper {
+            width: 100%;
+            max-width: 1400px;
+        }
+
+        .glass-panel {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft);
+            padding: 1.5rem;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .brand-logo {
+            width: 45px;
+            height: 45px;
+            background: rgba(94, 179, 246, 0.12);
+            border: 1px solid rgba(94, 179, 246, 0.3);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.6rem;
+            color: var(--accent);
+        }
+
+        .brand h1 {
+            font-weight: 600;
+            font-size: 1.6rem;
+        }
+
+        .brand h1 span {
+            font-weight: 300;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            display: block;
+            letter-spacing: 2px;
+        }
+
+        .badge {
+            background: rgba(94, 179, 246, 0.1);
+            border: 1px solid rgba(94, 179, 246, 0.3);
+            color: #b0d7ff;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+        }
+
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .editor-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .editor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.6rem;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .editor-container {
+            height: 450px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--surface-border);
+            overflow: hidden;
+            background: #0a0e12;
+        }
+
+        .obfuscate-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 1.5rem 0;
+        }
+
+        .btn-obfuscate {
+            background: rgba(94, 179, 246, 0.15);
+            border: 1px solid rgba(94, 179, 246, 0.5);
+            color: #c9e6ff;
+            padding: 1rem 3rem;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 1px;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 15px rgba(94, 179, 246, 0.2);
+        }
+
+        .btn-obfuscate:hover {
+            background: rgba(94, 179, 246, 0.3);
+            box-shadow: 0 0 30px rgba(94, 179, 246, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-obfuscate:active {
+            transform: translateY(0);
+        }
+
+        .btn-obfuscate.processing {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: rgba(16, 24, 30, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.9rem 1.5rem;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            z-index: 999;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: 0.3s;
+            pointer-events: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            border-color: rgba(107, 213, 160, 0.6);
+        }
+
+        .toast.error {
+            border-color: rgba(245, 139, 139, 0.7);
+        }
+
+        .counter {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+    </style>
 </head>
 <body>
     <div class="app-wrapper">
@@ -19,100 +221,30 @@
                 <h1>APEX HUB <span>Lua/Luau Obfuscator</span></h1>
                 <span class="badge">LUA/LUAU</span>
             </div>
-            <nav class="nav">
-                <span class="active">Obfuscator</span>
-                <span>Settings</span>
-                <span>Documentation</span>
-                <span>About</span>
-            </nav>
         </header>
 
-        <!-- Main editor grid -->
+        <!-- Editor Grid -->
         <div class="editor-grid">
-            <div class="editor-col glass-panel">
+            <div class="glass-panel">
                 <div class="editor-header">
                     INPUT
-                    <div class="counter" id="inputCounter">Lines: 0 | Characters: 0</div>
+                    <span class="counter" id="inputCounter">0 lines</span>
                 </div>
                 <div id="inputEditor" class="editor-container"></div>
-                <div class="editor-status">
-                    <span>Lua / Luau source</span>
-                    <span id="inputOriginalInfo"></span>
-                </div>
             </div>
-            <div class="editor-col glass-panel">
+            <div class="glass-panel">
                 <div class="editor-header">
-                    OBFUSCATED OUTPUT
-                    <div class="counter" id="outputCounter">Lines: 0 | Characters: 0</div>
+                    OUTPUT
+                    <span class="counter" id="outputCounter">0 lines</span>
                 </div>
                 <div id="outputEditor" class="editor-container"></div>
-                <div class="editor-status">
-                    <span id="outputSizeInfo">Size: 0 KB</span>
-                    <span id="outputOriginalInfo"></span>
-                </div>
             </div>
         </div>
 
-        <!-- Settings panel -->
-        <div class="glass-panel settings-container">
-            <div class="settings-top">
-                <div class="preset-section">
-                    <span class="settings-label">Presets</span>
-                    <div class="preset-buttons">
-                        <button class="btn" data-preset="safe">SAFE</button>
-                        <button class="btn" data-preset="balanced">BALANCED</button>
-                        <button class="btn" data-preset="strong">STRONG</button>
-                        <button class="btn" data-preset="max">MAX</button>
-                    </div>
-                </div>
-                <div class="runtime-section">
-                    <span class="settings-label">Target</span>
-                    <select id="runtimeSelect" class="select-runtime">
-                        <option value="roblox" selected>Roblox Luau</option>
-                        <option value="luau">Generic Luau</option>
-                        <option value="lua">Generic Lua</option>
-                    </select>
-                </div>
-                <button class="btn" id="resetSettingsBtn">Reset Settings</button>
-            </div>
-            
-            <div class="settings-panel">
-                <div class="setting-group">
-                    <label class="toggle-item"><input type="checkbox" id="optRenameVars" checked> Rename Variables</label>
-                    <label class="toggle-item"><input type="checkbox" id="optRenameFuncs" checked> Rename Functions</label>
-                    <label class="toggle-item"><input type="checkbox" id="optStringProtect" checked> String Protection</label>
-                    <label class="toggle-item"><input type="checkbox" id="optConstTransform" checked> Constant Transform</label>
-                    <label class="toggle-item"><input type="checkbox" id="optControlFlow" checked> Control Flow</label>
-                    <label class="toggle-item"><input type="checkbox" id="optDeadCode" checked> Dead Code</label>
-                    <label class="toggle-item"><input type="checkbox" id="optMinify" checked> Minify</label>
-                    <label class="toggle-item"><input type="checkbox" id="optPreserveGlobals" checked> Preserve Globals</label>
-                    <label class="toggle-item"><input type="checkbox" id="optPreserveAPI" checked> Preserve API Names</label>
-                </div>
-            </div>
-            
-            <div class="obfuscate-wrapper">
-                <button class="btn btn-primary" id="obfuscateBtn">⚡ OBFUSCATE</button>
-                <div class="action-buttons">
-                    <button class="btn" id="copyBtn">Copy</button>
-                    <button class="btn" id="downloadBtn">Download .lua</button>
-                    <button class="btn" id="validateBtn">Validate</button>
-                    <button class="btn" id="clearInputBtn">Clear Input</button>
-                    <button class="btn" id="clearOutputBtn">Clear Output</button>
-                    <button class="btn" id="formatInputBtn">Format Input</button>
-                </div>
-            </div>
-            
-            <div class="privacy-note">
-                <span>Client-side processing • Your source code stays in your browser.</span>
-                <span>Extreme mode may increase script size and runtime overhead.</span>
-            </div>
+        <!-- Obfuscate Button -->
+        <div class="obfuscate-section">
+            <button class="btn-obfuscate" id="obfuscateBtn">⚡ OBFUSCATE</button>
         </div>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <span>APEX HUB • Lua/Luau Developer Tools</span>
-            <span>v1.0.0</span>
-        </footer>
     </div>
 
     <!-- Toast -->
